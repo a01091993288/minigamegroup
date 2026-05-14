@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🐍 스네이크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e0e0e0;
+      user-select: none;
+    }
+    .home-btn {
+      position: fixed; top: 1rem; left: 1rem;
+      padding: 0.4rem 1rem;
+      border: 1.5px solid #7a8ba0;
+      border-radius: 20px;
+      color: #7a8ba0; text-decoration: none;
+      font-size: 0.8rem; transition: all 0.2s;
+    }
+    .home-btn:hover { border-color: #81c784; color: #81c784; }
+
+    h1 { font-size: 1.8rem; margin-bottom: 0.8rem; color: #81c784; letter-spacing: 3px; text-shadow: 0 0 20px #81c78466; }
+
+    #status-bar {
+      display: flex; gap: 1.5rem; margin-bottom: 0.8rem; align-items: center;
+    }
+    .stat {
+      display: flex; flex-direction: column; align-items: center;
+      background: #16213e; border: 1px solid #0f3460;
+      border-radius: 10px; padding: 0.4rem 1.2rem; min-width: 70px;
+    }
+    .stat-label { font-size: 0.62rem; color: #7a8ba0; letter-spacing: 2px; text-transform: uppercase; }
+    .stat-value { font-size: 1.4rem; font-weight: bold; color: #81c784; font-variant-numeric: tabular-nums; }
+
+    #canvas-wrap {
+      padding: 10px;
+      background: #16213e;
+      border: 2px solid #0f3460;
+      border-radius: 12px;
+      box-shadow: 0 0 40px #81c78422;
+    }
+    canvas { display: block; border-radius: 6px; }
+
+    #message {
+      margin-top: 0.8rem; font-size: 1rem; min-height: 1.5rem;
+      letter-spacing: 2px; text-align: center;
+    }
+    .msg-start { color: #7a8ba0; }
+    .msg-over  { color: #e94560; }
+    .msg-win   { color: #81c784; }
+
+    #restart-btn {
+      margin-top: 0.8rem;
+      padding: 0.5rem 1.8rem;
+      background: #81c784; color: #1a1a2e;
+      border: none; border-radius: 20px;
+      font-size: 0.9rem; font-weight: 700;
+      cursor: pointer; transition: opacity 0.2s, transform 0.2s;
+      display: none;
+    }
+    #restart-btn:hover { transform: scale(1.05); }
+
+    .controls-hint {
+      margin-top: 0.8rem;
+      font-size: 0.75rem; color: #7a8ba0; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <a class="home-btn" href="index.html">← 홈</a>
+  <h1>🐍 스네이크</h1>
+
+  <div id="status-bar">
+    <div class="stat"><span class="stat-label">점수</span><span class="stat-value" id="score">0</span></div>
+    <div class="stat"><span class="stat-label">최고</span><span class="stat-value" id="best">0</span></div>
+    <div class="stat"><span class="stat-label">레벨</span><span class="stat-value" id="level">1</span></div>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="canvas" width="400" height="400"></canvas>
+  </div>
+
+  <div id="message" class="msg-start">스페이스바 또는 화면을 눌러 시작</div>
+  <button id="restart-btn" onclick="startGame()">다시 시작</button>
+  <div class="controls-hint">↑ ↓ ← → 방향키 조작 &nbsp;|&nbsp; 모바일: 스와이프</div>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx    = canvas.getContext('2d');
+  const COLS = 20, ROWS = 20;
+  const CELL = canvas.width / COLS;
+
+  const scoreEl = document.getElementById('score');
+  const bestEl  = document.getElementById('best');
+  const levelEl = document.getElementById('level');
+  const msgEl   = document.getElementById('message');
+  const restartBtn = document.getElementById('restart-btn');
+
+  let snake, dir, nextDir, food, score, level, running, loopId;
+  let touchStartX, touchStartY;
+
+  function getBest() { return parseInt(localStorage.getItem('snake_best') || '0'); }
+  function saveBest(s) { if (s > getBest()) localStorage.setItem('snake_best', s); }
+
+  function rand(n) { return Math.floor(Math.random() * n); }
+
+  function spawnFood() {
+    const occupied = new Set(snake.map(s => s.x + ',' + s.y));
+    let x, y;
+    do { x = rand(COLS); y = rand(ROWS); } while (occupied.has(x + ',' + y));
+    food = { x, y };
+  }
+
+  function initState() {
+    const cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
+    snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
+    dir = { x: 1, y: 0 }; nextDir = { x: 1, y: 0 };
+    score = 0; level = 1;
+    scoreEl.textContent = 0; levelEl.textContent = 1;
+    bestEl.textContent = getBest();
+    spawnFood();
+  }
+
+  function getSpeed() { return Math.max(60, 160 - (level - 1) * 15); }
+
+  function step() {
+    dir = nextDir;
+    const head = { x: (snake[0].x + dir.x + COLS) % COLS, y: (snake[0].y + dir.y + ROWS) % ROWS };
+
+    if (snake.some(s => s.x === head.x && s.y === head.y)) {
+      endGame(); return;
+    }
+
+    snake.unshift(head);
+
+    if (head.x === food.x && head.y === food.y) {
+      score += level * 10;
+      scoreEl.textContent = score;
+      saveBest(score);
+      bestEl.textContent = getBest();
+      level = Math.floor(score / 50) + 1;
+      levelEl.textContent = level;
+      spawnFood();
+    } else {
+      snake.pop();
+    }
+
+    draw();
+    loopId = setTimeout(step, getSpeed());
+  }
+
+  function draw() {
+    ctx.fillStyle = '#0d1b33';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // grid dots
+    ctx.fillStyle = '#ffffff06';
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) {
+        ctx.beginPath();
+        ctx.arc(c * CELL + CELL / 2, r * CELL + CELL / 2, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    // food
+    const fx = food.x * CELL, fy = food.y * CELL;
+    ctx.save();
+    ctx.shadowColor = '#e94560'; ctx.shadowBlur = 12;
+    ctx.fillStyle = '#e94560';
+    ctx.beginPath();
+    ctx.arc(fx + CELL / 2, fy + CELL / 2, CELL / 2 - 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // snake
+    snake.forEach((s, i) => {
+      const x = s.x * CELL, y = s.y * CELL;
+      const t = i / snake.length;
+      const r = Math.round(129 + (20 - 129) * t);
+      const g = Math.round(199 + (80 - 199) * t);
+      const b = Math.round(132 + (30 - 132) * t);
+      ctx.save();
+      ctx.shadowColor = `rgb(${r},${g},${b})`; ctx.shadowBlur = i === 0 ? 10 : 4;
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const pad = i === 0 ? 1 : 2;
+      roundRect(ctx, x + pad, y + pad, CELL - pad * 2, CELL - pad * 2, 5);
+      ctx.restore();
+
+      // eyes on head
+      if (i === 0) {
+        ctx.fillStyle = '#1a1a2e';
+        const ex = x + CELL / 2 + dir.x * 4, ey = y + CELL / 2 + dir.y * 4;
+        const ox = dir.y * 4, oy = dir.x * 4;
+        ctx.beginPath(); ctx.arc(ex + ox, ey - oy, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex - ox, ey + oy, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawOverlay(text, sub) {
+    ctx.fillStyle = '#1a1a2ecc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#e94560';
+    ctx.font = 'bold 28px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 - 10);
+    ctx.fillStyle = '#7a8ba0';
+    ctx.font = '15px Segoe UI';
+    ctx.fillText(sub, canvas.width / 2, canvas.height / 2 + 22);
+  }
+
+  function startGame() {
+    clearTimeout(loopId);
+    initState();
+    running = true;
+    msgEl.textContent = '';
+    msgEl.className = '';
+    restartBtn.style.display = 'none';
+    draw();
+    loopId = setTimeout(step, getSpeed());
+  }
+
+  function endGame() {
+    running = false;
+    clearTimeout(loopId);
+    saveBest(score);
+    bestEl.textContent = getBest();
+    drawOverlay('게임 오버', `점수: ${score}`);
+    msgEl.textContent = '💥 게임 오버!';
+    msgEl.className = 'msg-over';
+    restartBtn.style.display = 'inline-block';
+  }
+
+  // 키 입력
+  const keyMap = {
+    ArrowUp:    { x: 0, y: -1 }, ArrowDown:  { x: 0, y: 1 },
+    ArrowLeft:  { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 },
+    w: { x: 0, y: -1 }, s: { x: 0, y: 1 },
+    a: { x: -1, y: 0 }, d: { x: 1, y: 0 },
+  };
+  document.addEventListener('keydown', e => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      if (!running) { startGame(); return; }
+    }
+    const d = keyMap[e.key];
+    if (d && !(d.x === -dir.x && d.y === -dir.y)) {
+      nextDir = d;
+      e.preventDefault();
+    }
+  });
+
+  // 터치 스와이프
+  canvas.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    if (!running) startGame();
+    e.preventDefault();
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const absDx = Math.abs(dx), absDy = Math.abs(dy);
+    if (Math.max(absDx, absDy) < 20) return;
+    let d;
+    if (absDx > absDy) d = dx > 0 ? { x: 1, y: 0 } : { x: -1, y: 0 };
+    else               d = dy > 0 ? { x: 0, y: 1 } : { x: 0, y: -1 };
+    if (!(d.x === -dir.x && d.y === -dir.y)) nextDir = d;
+    e.preventDefault();
+  }, { passive: false });
+
+  canvas.addEventListener('click', () => { if (!running) startGame(); });
+
+  // 초기 화면
+  initState();
+  draw();
+  drawOverlay('스네이크', '스페이스바 또는 클릭으로 시작');
+  msgEl.textContent = '스페이스바 또는 화면을 눌러 시작';
+  msgEl.className = 'msg-start';
+  bestEl.textContent = getBest();
+</script>
+</body>
+</html>

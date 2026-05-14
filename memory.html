@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🃏 메모리 카드</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh; padding: 1rem;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e0e0e0;
+    }
+    .home-btn {
+      position: fixed; top: 1rem; left: 1rem;
+      padding: 0.4rem 1rem;
+      border: 1.5px solid #7a8ba0; border-radius: 20px;
+      color: #7a8ba0; text-decoration: none;
+      font-size: 0.8rem; transition: all 0.2s;
+    }
+    .home-btn:hover { border-color: #4dd0e1; color: #4dd0e1; }
+
+    h1 { font-size: 1.8rem; margin-bottom: 0.8rem; color: #4dd0e1; letter-spacing: 3px; text-shadow: 0 0 20px #4dd0e166; }
+
+    #controls { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; }
+    .diff-btn {
+      padding: 0.35rem 0.9rem;
+      border: 1.5px solid #4dd0e1; border-radius: 20px;
+      background: transparent; color: #4dd0e1;
+      font-size: 0.8rem; cursor: pointer; transition: all 0.2s;
+    }
+    .diff-btn.active, .diff-btn:hover { background: #4dd0e1; color: #1a1a2e; }
+
+    #status-bar { display: flex; gap: 1rem; margin-bottom: 0.8rem; align-items: center; }
+    .stat {
+      display: flex; flex-direction: column; align-items: center;
+      background: #16213e; border: 1px solid #0f3460;
+      border-radius: 10px; padding: 0.4rem 1rem; min-width: 65px;
+    }
+    .stat-label { font-size: 0.6rem; color: #7a8ba0; letter-spacing: 2px; text-transform: uppercase; }
+    .stat-value { font-size: 1.3rem; font-weight: bold; color: #4dd0e1; font-variant-numeric: tabular-nums; }
+
+    .reset-btn {
+      width: 42px; height: 42px; border-radius: 50%;
+      border: 1.5px solid #4dd0e1; background: transparent;
+      font-size: 1.1rem; cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+      color: #4dd0e1;
+    }
+    .reset-btn:hover { background: #4dd0e1; color: #1a1a2e; transform: rotate(20deg); }
+
+    #board-wrap {
+      padding: 12px;
+      background: #16213e; border: 2px solid #0f3460;
+      border-radius: 14px;
+      box-shadow: 0 0 40px #4dd0e122;
+    }
+    #board { display: grid; gap: 8px; }
+
+    /* 카드 뒤집기 3D */
+    .card-wrap {
+      perspective: 600px;
+      cursor: pointer;
+    }
+    .card {
+      width: 100%; height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.4s ease;
+    }
+    .card.flipped  { transform: rotateY(180deg); }
+    .card.matched  { transform: rotateY(180deg); }
+    .card-face {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 10px;
+      backface-visibility: hidden;
+    }
+    .card-back {
+      background: #0f3460;
+      box-shadow: inset 0 -3px 0 #0a2545, inset 0 3px 0 #1a4a80;
+      font-size: 1.2rem; color: #4dd0e166;
+    }
+    .card-front {
+      background: #16213e;
+      border: 2px solid #4dd0e133;
+      transform: rotateY(180deg);
+      font-size: 1.8rem;
+    }
+    .card.matched .card-front {
+      border-color: #4dd0e1;
+      background: #0a2535;
+      box-shadow: 0 0 12px #4dd0e144;
+    }
+    .card-wrap:hover .card:not(.flipped):not(.matched) .card-back {
+      background: #1a4a80;
+    }
+
+    #message {
+      margin-top: 0.8rem; font-size: 1rem; min-height: 1.5rem;
+      letter-spacing: 1px; text-align: center;
+    }
+    .msg-win  { color: #4dd0e1; }
+    .msg-play { color: #7a8ba0; font-size: 0.85rem; }
+
+    /* 완료 오버레이 */
+    #overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 200;
+      background: #1a1a2ecc; backdrop-filter: blur(6px);
+      flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+    }
+    #overlay.show { display: flex; }
+    .overlay-emoji { font-size: 4rem; animation: bigBounce 0.8s ease; }
+    @keyframes bigBounce { 0%{transform:scale(0)} 60%{transform:scale(1.2)} 100%{transform:scale(1)} }
+    .overlay-title  { font-size: 2rem; font-weight: 900; color: #4dd0e1; }
+    .overlay-sub    { color: #7a8ba0; font-size: 1rem; }
+    .overlay-btn {
+      padding: 0.7rem 2rem;
+      background: #4dd0e1; color: #1a1a2e;
+      border: none; border-radius: 20px;
+      font-size: 1rem; font-weight: 700; cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .overlay-btn:hover { transform: scale(1.05); }
+  </style>
+</head>
+<body>
+  <a class="home-btn" href="index.html">← 홈</a>
+  <h1>🃏 메모리 카드</h1>
+
+  <div id="controls">
+    <button class="diff-btn active" data-size="4">초급 4×4</button>
+    <button class="diff-btn" data-size="6">고급 6×6</button>
+  </div>
+
+  <div id="status-bar">
+    <div class="stat"><span class="stat-label">시도</span><span class="stat-value" id="moves">0</span></div>
+    <div class="stat"><span class="stat-label">맞춤</span><span class="stat-value" id="pairs">0</span></div>
+    <div class="stat"><span class="stat-label">시간</span><span class="stat-value" id="timer">0</span></div>
+    <button class="reset-btn" onclick="startGame()" title="새 게임">🔄</button>
+  </div>
+
+  <div id="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <div id="message" class="msg-play">카드를 클릭해 쌍을 찾으세요!</div>
+
+  <div id="overlay">
+    <div class="overlay-emoji">🎉</div>
+    <div class="overlay-title">완료!</div>
+    <div class="overlay-sub" id="overlay-sub"></div>
+    <button class="overlay-btn" onclick="startGame(); document.getElementById('overlay').classList.remove('show')">다시 하기</button>
+  </div>
+
+<script>
+  const EMOJIS_ALL = ['🐶','🐱','🦊','🐻','🐼','🦁','🐯','🐮','🐸','🐵','🐔','🦆',
+                      '🦋','🐢','🦄','🐙','🦀','🐠','🌸','⭐','🍎','🍕','🎸','🎮',
+                      '🚀','🌈','🔥','💎','🎯','🧩','🎲','🏆','💡','🎪','🌙','🍦'];
+
+  let gridSize = 4;
+  let cards = [], flipped = [], matched = 0, moves = 0;
+  let lockBoard = false, timerInt = null, elapsed = 0;
+
+  const boardEl  = document.getElementById('board');
+  const movesEl  = document.getElementById('moves');
+  const pairsEl  = document.getElementById('pairs');
+  const timerEl  = document.getElementById('timer');
+  const msgEl    = document.getElementById('message');
+  const overlayEl = document.getElementById('overlay');
+
+  document.querySelectorAll('.diff-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelector('.diff-btn.active').classList.remove('active');
+      btn.classList.add('active');
+      gridSize = parseInt(btn.dataset.size);
+      startGame();
+    });
+  });
+
+  function startGame() {
+    clearInterval(timerInt); timerInt = null;
+    flipped = []; matched = 0; moves = 0; elapsed = 0; lockBoard = false;
+    movesEl.textContent = 0; pairsEl.textContent = 0; timerEl.textContent = 0;
+    msgEl.textContent = '카드를 클릭해 쌍을 찾으세요!';
+    msgEl.className = 'msg-play';
+
+    const pairs = gridSize * gridSize / 2;
+    const pool  = [...EMOJIS_ALL].sort(() => Math.random() - 0.5).slice(0, pairs);
+    cards = [...pool, ...pool].sort(() => Math.random() - 0.5);
+
+    const cellSize = gridSize === 4 ? 72 : 58;
+    const gap      = gridSize === 4 ? 8  : 6;
+    boardEl.style.gridTemplateColumns = `repeat(${gridSize}, ${cellSize}px)`;
+    boardEl.style.gap = gap + 'px';
+
+    boardEl.innerHTML = '';
+    cards.forEach((emoji, idx) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'card-wrap';
+      wrap.style.width  = cellSize + 'px';
+      wrap.style.height = cellSize + 'px';
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.idx = idx;
+      card.dataset.emoji = emoji;
+
+      const back  = document.createElement('div'); back.className  = 'card-face card-back'; back.textContent = '?';
+      const front = document.createElement('div'); front.className = 'card-face card-front'; front.textContent = emoji;
+
+      card.appendChild(back); card.appendChild(front);
+      wrap.appendChild(card);
+      wrap.addEventListener('click', () => onCardClick(card));
+      boardEl.appendChild(wrap);
+    });
+  }
+
+  function onCardClick(card) {
+    if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+    if (!timerInt && elapsed === 0) {
+      timerInt = setInterval(() => { elapsed++; timerEl.textContent = elapsed; }, 1000);
+    }
+
+    card.classList.add('flipped');
+    flipped.push(card);
+
+    if (flipped.length === 2) {
+      lockBoard = true;
+      moves++;
+      movesEl.textContent = moves;
+
+      const [a, b] = flipped;
+      if (a.dataset.emoji === b.dataset.emoji) {
+        a.classList.add('matched'); b.classList.add('matched');
+        matched++;
+        pairsEl.textContent = matched;
+        flipped = [];
+        lockBoard = false;
+
+        if (matched === cards.length / 2) {
+          clearInterval(timerInt); timerInt = null;
+          const overlaySubEl = document.getElementById('overlay-sub');
+          overlaySubEl.textContent = `시도 ${moves}회 · ${elapsed}초`;
+          overlayEl.classList.add('show');
+        }
+      } else {
+        setTimeout(() => {
+          a.classList.remove('flipped'); b.classList.remove('flipped');
+          flipped = []; lockBoard = false;
+        }, 900);
+      }
+    }
+  }
+
+  startGame();
+</script>
+</body>
+</html>
